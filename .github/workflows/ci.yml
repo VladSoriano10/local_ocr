@@ -26,7 +26,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y tesseract-ocr tesseract-ocr-spa libreoffice-writer libegl1 fonts-noto-core
       - name: Dependencias de Python
-        run: python -m pip install -r requirements.txt '.[dev]'
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip install -e '.[dev]'
       - name: Estilo
         run: |
           ruff check .

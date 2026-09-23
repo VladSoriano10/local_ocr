@@ -10,6 +10,7 @@ import pymupdf
 from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QApplication
 
+from local_ocr import gui
 from local_ocr.documents import DocumentOptions, convert_document
 from local_ocr.gui import THEME, MainWindow
 from local_ocr.projects import scan_project
@@ -18,8 +19,7 @@ from local_ocr.projects import scan_project
 def main():
     output = Path(sys.argv[1] if len(sys.argv) > 1 else "qa").resolve()
     output.mkdir(parents=True, exist_ok=True)
-    QSettings.setDefaultFormat(QSettings.Format.IniFormat)
-    QSettings.setPath(QSettings.Format.IniFormat, QSettings.Scope.UserScope, str(output / "settings"))
+    gui.QSettings = lambda *_: QSettings(str(output / "preview.ini"), QSettings.Format.IniFormat)
     app = QApplication([])
     app.setStyle("Fusion")
     app.setStyleSheet(THEME)
@@ -45,7 +45,6 @@ def main():
     window.tabs.setCurrentIndex(2)
     app.processEvents()
     window.grab().save(str(output / "ajustes.png"))
-    window.close()
 
     original = output / "muestra_escaneada.pdf"
     with pymupdf.open() as native:
@@ -61,6 +60,14 @@ def main():
     result = convert_document(original, output / "resultados", DocumentOptions(language="eng"))
     with pymupdf.open(result["pdf"]) as pdf:
         pdf[0].get_pixmap(dpi=120).save(output / "pdf_resultado.png")
+    window.tabs.setCurrentIndex(0)
+    window.add_documents([str(original)])
+    window.handle_event({"type": "file_done", "index": 0, "result": result})
+    window.status.setText("Documento de prueba convertido: PDF buscable + Markdown.")
+    window.progress.setValue(100)
+    app.processEvents()
+    window.grab().save(str(output / "resultado.png"))
+    window.close()
     print(result["output"])
 
 

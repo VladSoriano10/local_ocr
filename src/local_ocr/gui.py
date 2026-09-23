@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 
 from PySide6.QtCore import QProcess, QSettings, Qt, QTimer, QUrl, Signal
-from PySide6.QtGui import QCloseEvent, QDesktopServices, QFont
+from PySide6.QtGui import QCloseEvent, QColor, QDesktopServices, QFont, QPainter
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -36,35 +36,8 @@ from PySide6.QtWidgets import (
 )
 
 from . import __version__
+from .appearance import THEME, DualityBanner, app_icon, emblem, theme_for
 from .common import application_command, write_json
-
-THEME = """
-QMainWindow, QWidget { background: #111827; color: #e5e7eb; font-size: 13px; }
-QLabel#title { font-size: 30px; font-weight: 700; color: #ffffff; }
-QLabel#muted { color: #9ca3af; }
-QLabel#badge { color: #6ee7b7; background: #153832; padding: 6px 14px; border-radius: 12px; }
-QTabWidget::pane { border: 1px solid #374151; border-radius: 9px; }
-QTabBar::tab { padding: 12px 22px; margin-right: 4px; color: #9ca3af; }
-QTabBar::tab:selected { background: #253247; color: #6ee7b7; border-bottom: 2px solid #6ee7b7; }
-QGroupBox { border: 1px solid #374151; border-radius: 8px; margin-top: 12px; padding: 16px 10px 10px; }
-QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 5px; color: #d1d5db; }
-QPushButton { background: #2d3c52; border: 1px solid #45536a; border-radius: 6px; padding: 8px 14px; }
-QPushButton:hover { background: #3d506c; }
-QPushButton#primary { background: #6ee7b7; color: #102d27; border: none; font-weight: 700; }
-QPushButton#primary:hover { background: #a7f3d0; }
-QPushButton:disabled { background: #1f2937; color: #6b7280; border-color: #374151; }
-QLineEdit, QPlainTextEdit, QComboBox, QSpinBox { background: #0b1220; border: 1px solid #374151;
-    padding: 7px; border-radius: 5px; selection-background-color: #275c54; }
-QTableWidget, QTreeWidget { background: #0b1220; alternate-background-color: #131e30;
-    border: 1px solid #374151; border-radius: 5px; selection-background-color: #275c54; }
-QHeaderView::section { background: #1f2937; padding: 8px; border: none; color: #cbd5e1; }
-QProgressBar { border: 1px solid #374151; border-radius: 5px; text-align: center; min-height: 18px; }
-QProgressBar::chunk { background: #34b88a; border-radius: 4px; }
-QCheckBox { spacing: 7px; padding: 3px; }
-QCheckBox::indicator { width: 16px; height: 16px; }
-QScrollArea { border: none; }
-QToolTip { color: #e5e7eb; background: #1f2937; border: 1px solid #64748b; }
-"""
 
 
 def label(text: str, muted: bool = False) -> QLabel:
@@ -79,6 +52,7 @@ def label(text: str, muted: bool = False) -> QLabel:
 def button(text: str, callback, primary: bool = False) -> QPushButton:
     widget = QPushButton(text)
     widget.clicked.connect(callback)
+    widget.setCursor(Qt.CursorShape.PointingHandCursor)
     if primary:
         widget.setObjectName("primary")
     return widget
@@ -88,8 +62,9 @@ def scroll_page() -> tuple[QScrollArea, QVBoxLayout]:
     scroll = QScrollArea()
     scroll.setWidgetResizable(True)
     body = QWidget()
+    body.setObjectName("scrollBody")
     layout = QVBoxLayout(body)
-    layout.setContentsMargins(18, 18, 18, 18)
+    layout.setContentsMargins(2, 2, 8, 2)
     layout.setSpacing(12)
     scroll.setWidget(body)
     return scroll, layout
@@ -106,8 +81,23 @@ class FileTable(QTableWidget):
         self.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.setAcceptDrops(True)
-        self.setMinimumHeight(155)
+        self.setMinimumHeight(130)
+        self.verticalHeader().hide()
+        self.setShowGrid(False)
+        self.verticalHeader().setDefaultSectionSize(36)
         self.setAlternatingRowColors(True)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if self.rowCount() == 0:
+            painter = QPainter(self.viewport())
+            painter.setPen(QColor("#9aadc5"))
+            painter.drawText(
+                self.viewport().rect(),
+                Qt.AlignmentFlag.AlignCenter,
+                "Arrastra aquí tus PDF o Word\n\nO pulsa «Agregar documentos» para comenzar.",
+            )
+            painter.end()
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():
@@ -125,9 +115,10 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.settings = QSettings("LocalOCR", "LocalOCR")
-        self.setWindowTitle(f"Local OCR {__version__}")
-        self.resize(1080, 840)
-        self.setMinimumSize(820, 640)
+        self.setWindowTitle(f"VladTor · Local OCR {__version__}")
+        self.setWindowIcon(app_icon())
+        self.resize(1240, 860)
+        self.setMinimumSize(980, 700)
         self.process: QProcess | None = None
         self.job_temp = None
         self.job_path = None
@@ -143,237 +134,386 @@ class MainWindow(QMainWindow):
         self.document_results = {}
         self.current_operation = ""
         central = QWidget()
+        central.setObjectName("central")
         self.setCentralWidget(central)
         layout = QVBoxLayout(central)
-        layout.setContentsMargins(24, 20, 24, 18)
-        layout.setSpacing(12)
+        layout.setContentsMargins(24, 16, 24, 16)
+        layout.setSpacing(10)
         heading = QHBoxLayout()
-        title = label("Local OCR")
-        title.setObjectName("title")
-        heading.addWidget(title)
+        mark = QLabel()
+        mark.setPixmap(emblem(36))
+        mark.setAccessibleName("Ala de ángel y ala de demonio")
+        heading.addWidget(mark)
+        identity = QVBoxLayout()
+        identity.setSpacing(2)
+        title = label("VLADTOR")
+        title.setObjectName("brand")
+        identity.addWidget(title)
+        subtitle = label(f"LOCAL OCR  /  DUALIDAD  /  {__version__}", True)
+        subtitle.setWordWrap(False)
+        subtitle.setStyleSheet("font-size: 10px; letter-spacing: 2px;")
+        identity.addWidget(subtitle)
+        heading.addLayout(identity)
         heading.addStretch()
-        badge = label("LOCAL · SIN APIs DE IA")
+        badge = label("LOCAL  ·  SIN APIs DE IA")
         badge.setWordWrap(False)
         badge.setObjectName("badge")
+        badge.setFixedHeight(28)
         heading.addWidget(badge)
         layout.addLayout(heading)
-        layout.addWidget(
-            label(
-                "Documentos buscables y contexto de código. Tus archivos permanecen en tu computadora.", True
-            )
-        )
         self.tabs = QTabWidget()
+        self.tabs.setDocumentMode(True)
+        self.tabs.tabBar().setDrawBase(False)
         layout.addWidget(self.tabs, 1)
         self.build_documents()
         self.build_projects()
         self.build_settings()
+        self.tabs.currentChanged.connect(self.change_realm)
         output = QHBoxLayout()
-        output.addWidget(label("Guardar en"))
+        output.setContentsMargins(0, 2, 0, 0)
+        output.addWidget(label("Guardar en", True))
         default_output = str(Path.home() / "Documents" / "Local OCR")
         self.output_edit = QLineEdit(str(self.settings.value("output", default_output)))
         self.output_edit.setReadOnly(True)
         output.addWidget(self.output_edit, 1)
         output.addWidget(button("Elegir carpeta", self.choose_output))
         self.output_row = QWidget()
+        self.output_row.setObjectName("panel")
         self.output_row.setLayout(output)
         layout.addWidget(self.output_row)
-        self.status = label("Listo. Agrega documentos o selecciona un proyecto.", True)
-        layout.addWidget(self.status)
         actions = QHBoxLayout()
-        self.progress = QProgressBar()
-        self.progress.setRange(0, 100)
-        self.progress.setValue(0)
-        actions.addWidget(self.progress, 1)
+        self.status = label("Listo. Agrega documentos o selecciona un proyecto.", True)
+        actions.addWidget(self.status, 1)
         self.cancel_button = button("Cancelar", self.cancel_job)
         self.cancel_button.setEnabled(False)
         actions.addWidget(self.cancel_button)
         self.open_button = button("Abrir resultados", self.open_output)
         self.open_button.setEnabled(False)
         actions.addWidget(self.open_button)
+        self.log_toggle = button("Ver registro", self.toggle_log)
+        self.log_toggle.setCheckable(True)
+        self.log_toggle.setObjectName("quiet")
+        actions.addWidget(self.log_toggle)
         layout.addLayout(actions)
+        self.progress = QProgressBar()
+        self.progress.setRange(0, 100)
+        self.progress.setValue(0)
+        self.progress.setTextVisible(False)
+        self.progress.setFixedHeight(6)
+        layout.addWidget(self.progress)
         self.log = QPlainTextEdit()
         self.log.setReadOnly(True)
-        self.log.setMaximumHeight(105)
-        self.log.setPlaceholderText(
-            "Aquí aparecerán resultados, avisos y errores. No se envían a ningún servidor."
-        )
+        self.log.setMaximumHeight(100)
+        self.log.setPlaceholderText("Resultados, avisos y errores del procesamiento local.")
         self.log.document().setMaximumBlockCount(250)
+        self.log.setVisible(False)
         layout.addWidget(self.log)
+        self.change_realm(0)
+
+    def change_realm(self, index):
+        self.setStyleSheet(theme_for(index))
+
+    def toggle_log(self, checked):
+        self.log.setVisible(checked)
+        self.log_toggle.setText("Ocultar registro" if checked else "Ver registro")
+
+    def make_page(self, title, index, eyebrow, hero, description):
+        page = QWidget()
+        page.setObjectName("page")
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 4, 0, 4)
+        layout.setSpacing(14)
+        self.tabs.addTab(page, title)
+        layout.addWidget(DualityBanner(index, eyebrow, hero, description))
+        scroll, content = scroll_page()
+        content.setContentsMargins(0, 0, 0, 2)
+        layout.addWidget(scroll, 1)
+        return content
 
     def build_documents(self):
-        page, layout = scroll_page()
-        self.tabs.addTab(page, "Documentos")
-        layout.addWidget(label("PDF o Word → PDF con texto seleccionable + Markdown"))
-        layout.addWidget(
-            label(
-                "Arrastra archivos a la lista. Cada conversión crea una carpeta nueva con sus dos salidas y un informe.",
-                True,
-            )
+        layout = self.make_page(
+            "01   Documentos OCR",
+            0,
+            "ÁNGEL  /  REVELAR",
+            "Del papel a las palabras.",
+            "PDF y Word → PDF con texto seleccionable + Markdown",
         )
-        row = QHBoxLayout()
-        row.addWidget(button("Agregar documentos", self.choose_documents))
-        row.addWidget(button("Quitar seleccionados", self.remove_documents))
-        row.addWidget(button("Vaciar lista", lambda: self.clear_documents()))
-        row.addStretch()
-        row.addWidget(button("Generar PDF + Markdown", self.start_documents, True))
-        layout.addLayout(row)
-        self.files = FileTable()
-        self.files.paths_dropped.connect(self.add_documents)
-        self.files.cellDoubleClicked.connect(self.open_document_result)
-        layout.addWidget(self.files, 1)
-        options = QGroupBox("Opciones de conversión")
-        form = QFormLayout(options)
+        columns = QSplitter()
+        columns.setChildrenCollapsible(False)
+        columns.setMinimumHeight(430)
+        layout.addWidget(columns, 1)
+        left = QWidget()
+        left.setObjectName("panel")
+        left.setMinimumWidth(310)
+        left_layout = QVBoxLayout(left)
+        left_layout.setContentsMargins(0, 0, 10, 0)
+        left_layout.setSpacing(10)
+        options_scroll, options_layout = scroll_page()
+        options = QGroupBox("01 / CONFIGURACIÓN")
+        form = QVBoxLayout(options)
+        form.setSpacing(8)
         self.language = QComboBox()
         for title, value in (("Español + inglés", "spa+eng"), ("Español", "spa"), ("Inglés", "eng")):
             self.language.addItem(title, value)
-        form.addRow("Idioma", self.language)
+        form.addWidget(label("Idioma del documento", True))
+        form.addWidget(self.language)
         self.mode = QComboBox()
-        self.mode.addItem("Automático: texto nativo e imágenes (recomendado)", "auto")
-        self.mode.addItem("Solo páginas sin texto (omite imágenes de páginas mixtas)", "missing")
-        self.mode.addItem("Forzar OCR: rasteriza todas las páginas", "force")
-        form.addRow("Modo", self.mode)
+        self.mode.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.mode.setMinimumContentsLength(16)
+        self.mode.addItem("Automático · recomendado", "auto")
+        self.mode.addItem("Solo páginas sin texto", "missing")
+        self.mode.addItem("Forzar OCR en todas las páginas", "force")
+        form.addWidget(label("Tratamiento del texto", True))
+        form.addWidget(self.mode)
+        self.mode_hint = label("Conserva texto nativo y reconoce el texto de imágenes.", True)
+        self.mode_hint.setStyleSheet("font-size: 11px;")
+        form.addWidget(self.mode_hint)
         self.dpi = QComboBox()
         for value in (200, 300, 400):
             self.dpi.addItem(f"{value} DPI", value)
         self.dpi.setCurrentIndex(1)
-        form.addRow("Resolución OCR", self.dpi)
-        self.rotate = QCheckBox("Corregir páginas giradas (requiere idioma osd)")
-        self.deskew = QCheckBox("Enderezar escaneos; solo disponible en modo Forzar")
+        form.addWidget(label("Resolución OCR", True))
+        form.addWidget(self.dpi)
+        self.rotate = QCheckBox("Corregir páginas giradas")
+        self.rotate.setToolTip("Requiere el idioma osd instalado en Tesseract.")
+        self.deskew = QCheckBox("Enderezar escaneos")
+        self.deskew.setToolTip("Disponible en modo Forzar OCR.")
         self.deskew.setEnabled(False)
         self.mode.currentIndexChanged.connect(self.mode_changed)
-        self.extract_images = QCheckBox("Extraer imágenes al Markdown (excepto escaneos de página completa)")
-        self.tables = QCheckBox("Intentar reconocer tablas; revisar el resultado")
+        self.extract_images = QCheckBox("Extraer imágenes al Markdown")
+        self.extract_images.setToolTip("Omite los escaneos de página completa.")
+        self.tables = QCheckBox("Reconocer tablas")
+        self.tables.setToolTip("Reconocimiento básico; revisa las tablas complejas.")
         self.tables.setChecked(True)
         for box in (self.rotate, self.deskew, self.extract_images, self.tables):
-            form.addRow(box)
-        layout.addWidget(options)
-        layout.addWidget(
-            label(
-                "El PDF conserva su aspecto en el modo automático; Markdown reconstruye el contenido, no el diseño exacto. "
-                "El OCR y el orden de lectura pueden requerir correcciones. Word necesita LibreOffice.",
-                True,
-            )
+            form.addWidget(box)
+        options_layout.addWidget(options)
+        options.setToolTip(
+            "El PDF conserva su aspecto en modo automático; Markdown reconstruye el contenido. "
+            "Word necesita LibreOffice."
         )
+        options_layout.addStretch()
+        left_layout.addWidget(options_scroll, 1)
+        self.documents_button = button("Generar PDF + Markdown", self.start_documents, True)
+        left_layout.addWidget(self.documents_button)
+        columns.addWidget(left)
+        right = QWidget()
+        right.setObjectName("panel")
+        right.setMinimumWidth(440)
+        right_layout = QVBoxLayout(right)
+        right_layout.setContentsMargins(10, 0, 0, 0)
+        right_layout.setSpacing(10)
+        row = QHBoxLayout()
+        row.addWidget(button("Agregar documentos", self.choose_documents))
+        row.addWidget(button("Quitar", self.remove_documents))
+        row.addWidget(button("Vaciar", self.clear_documents))
+        row.addStretch()
+        self.document_count = label("0 documentos")
+        self.document_count.setObjectName("counter")
+        row.addWidget(self.document_count)
+        right_layout.addLayout(row)
+        self.files = FileTable()
+        self.files.paths_dropped.connect(self.add_documents)
+        self.files.cellDoubleClicked.connect(self.open_document_result)
+        self.files.itemSelectionChanged.connect(self.show_document_result)
+        right_layout.addWidget(self.files, 1)
+        results = QGroupBox("02 / RESULTADO · MARKDOWN")
+        results_layout = QVBoxLayout(results)
+        self.document_result_label = label(
+            "Selecciona un documento terminado para revisar su resultado.", True
+        )
+        results_layout.addWidget(self.document_result_label)
+        self.document_preview = QPlainTextEdit()
+        self.document_preview.setReadOnly(True)
+        self.document_preview.setFont(QFont("Consolas", 10))
+        self.document_preview.setStyleSheet('font-family: "Consolas", "DejaVu Sans Mono", monospace;')
+        self.document_preview.setMinimumHeight(100)
+        self.document_preview.setPlaceholderText(
+            "Aquí verás el Markdown real de tu documento.\n\n"
+            "El PDF buscable y el archivo .md se guardan juntos en una carpeta nueva."
+        )
+        results_layout.addWidget(self.document_preview, 1)
+        result_actions = QHBoxLayout()
+        self.pdf_button = button("Abrir PDF", lambda: self.open_result_file("pdf"))
+        self.markdown_button = button("Abrir Markdown", lambda: self.open_result_file("markdown"))
+        self.copy_markdown_button = button("Copiar texto visible", self.copy_document_preview)
+        self.copy_markdown_button.setToolTip(
+            "Copia solo la vista previa; los documentos largos se muestran truncados."
+        )
+        for action in (self.pdf_button, self.markdown_button, self.copy_markdown_button):
+            action.setEnabled(False)
+            result_actions.addWidget(action)
+        result_actions.addStretch()
+        results_layout.addLayout(result_actions)
+        right_layout.addWidget(results, 2)
+        columns.addWidget(right)
+        columns.setSizes([340, 810])
 
     def build_projects(self):
-        page, layout = scroll_page()
-        self.tabs.addTab(page, "Proyectos de código")
-        layout.addWidget(label("Elige el contexto que realmente necesita tu LLM"))
+        layout = self.make_page(
+            "02   Proyectos de código",
+            1,
+            "DEMONIO  /  FORJAR",
+            "Código convertido en contexto.",
+            "Selecciona lo esencial. Exporta tu proyecto a Markdown para LLM.",
+        )
         row = QHBoxLayout()
         self.root_edit = QLineEdit()
         self.root_edit.setReadOnly(True)
-        self.root_edit.setPlaceholderText("Selecciona una carpeta; no se ejecutará su código")
+        self.root_edit.setPlaceholderText("Selecciona una carpeta de código, en cualquier lenguaje")
         row.addWidget(self.root_edit, 1)
         row.addWidget(button("Seleccionar proyecto", self.choose_project))
+        row.addWidget(button("Analizar proyecto", self.start_scan, True))
         layout.addLayout(row)
-        opts = QHBoxLayout()
-        opts.addWidget(label("Tokens estimados / parte"))
-        self.token_budget = QSpinBox()
-        self.token_budget.setRange(1000, 500000)
-        self.token_budget.setSingleStep(1000)
-        self.token_budget.setValue(12000)
-        opts.addWidget(self.token_budget)
-        opts.addWidget(label("Máximo MB / archivo"))
+        columns = QSplitter()
+        columns.setChildrenCollapsible(False)
+        columns.setMinimumHeight(420)
+        layout.addWidget(columns, 1)
+        left = QWidget()
+        left.setObjectName("panel")
+        left_layout = QVBoxLayout(left)
+        left_layout.setContentsMargins(0, 0, 10, 0)
+        left_layout.setSpacing(9)
+        self.filter_edit = QLineEdit()
+        self.filter_edit.setPlaceholderText("Filtrar archivos por ruta…")
+        self.filter_edit.setToolTip("El filtro visual no cambia los archivos seleccionados.")
+        self.filter_edit.textChanged.connect(self.filter_tree)
+        left_layout.addWidget(self.filter_edit)
+        self.tree = QTreeWidget()
+        self.tree.setHeaderLabels(["Archivos del proyecto", "Tokens ≈"])
+        self.tree.setColumnWidth(0, 280)
+        self.tree.setMinimumHeight(150)
+        self.tree.itemChanged.connect(self.selection_changed)
+        self.tree.itemClicked.connect(self.preview_source)
+        self.tree.setAlternatingRowColors(True)
+        left_layout.addWidget(self.tree, 1)
+        checks = QHBoxLayout()
+        checks.addWidget(button("Marcar todos", lambda: self.check_all(True)))
+        checks.addWidget(button("Desmarcar todos", lambda: self.check_all(False)))
+        checks.addStretch()
+        left_layout.addLayout(checks)
+        filters = QGroupBox("FILTROS DE ANÁLISIS")
+        form = QVBoxLayout(filters)
+        limits = QHBoxLayout()
+        limits.addWidget(label("MB / archivo", True))
         self.file_limit = QSpinBox()
         self.file_limit.setRange(1, 20)
         self.file_limit.setValue(1)
         self.file_limit.valueChanged.connect(self.invalidate_scan)
-        opts.addWidget(self.file_limit)
+        limits.addWidget(self.file_limit)
         self.include_locks = QCheckBox("Incluir lockfiles")
         self.include_locks.toggled.connect(self.invalidate_scan)
-        opts.addWidget(self.include_locks)
-        layout.addLayout(opts)
+        limits.addWidget(self.include_locks)
+        form.addLayout(limits)
         self.exclusions = QLineEdit()
-        self.exclusions.setPlaceholderText(
-            "Exclusiones adicionales separadas por ;   ej.: tests/; *.csv; public/assets/"
-        )
+        self.exclusions.setPlaceholderText("Excluir: tests/; *.csv; public/assets/")
+        self.exclusions.setToolTip("Patrones adicionales separados por punto y coma.")
         self.exclusions.textChanged.connect(self.invalidate_scan)
-        layout.addWidget(self.exclusions)
-        actions = QHBoxLayout()
-        actions.addWidget(button("Analizar proyecto", self.start_scan, True))
-        self.export_button = button("Exportar a Markdown", self.start_export, True)
-        self.export_button.setEnabled(False)
-        actions.addWidget(self.export_button)
-        actions.addWidget(button("Marcar todos", lambda: self.check_all(True)))
-        actions.addWidget(button("Desmarcar todos", lambda: self.check_all(False)))
-        actions.addStretch()
-        layout.addLayout(actions)
-        self.filter_edit = QLineEdit()
-        self.filter_edit.setPlaceholderText("Filtrar archivos por ruta (no cambia la selección)")
-        self.filter_edit.textChanged.connect(self.filter_tree)
-        layout.addWidget(self.filter_edit)
-        splitter = QSplitter()
-        self.tree = QTreeWidget()
-        self.tree.setHeaderLabels(["Archivos incluidos", "Tokens ≈"])
-        self.tree.setColumnWidth(0, 330)
-        self.tree.setMinimumHeight(180)
-        self.tree.itemChanged.connect(self.selection_changed)
-        self.tree.itemClicked.connect(self.preview_source)
-        self.tree.setAlternatingRowColors(True)
-        splitter.addWidget(self.tree)
+        form.addWidget(self.exclusions)
+        note = label("Respeta .gitignore y omite binarios, dependencias y posibles secretos.", True)
+        note.setStyleSheet("font-size: 11px;")
+        form.addWidget(note)
+        left_layout.addWidget(filters)
+        columns.addWidget(left)
+        right = QWidget()
+        right.setObjectName("panel")
+        right_layout = QVBoxLayout(right)
+        right_layout.setContentsMargins(10, 0, 0, 0)
+        right_layout.setSpacing(10)
+        self.preview_path = label("VISTA PREVIA / SELECCIONA UN ARCHIVO")
+        self.preview_path.setObjectName("eyebrow")
+        right_layout.addWidget(self.preview_path)
         self.preview = QPlainTextEdit()
         self.preview.setReadOnly(True)
         self.preview.setFont(QFont("Consolas", 10))
+        self.preview.setStyleSheet('font-family: "Consolas", "DejaVu Sans Mono", monospace;')
         self.preview.setPlaceholderText(
-            "Selecciona un archivo para revisar su contenido antes de exportarlo."
+            "Revisa el contenido antes de exportarlo.\n\n"
+            "Conservamos texto, comentarios e indentación.\n"
+            "Tu proyecto se analiza sin ejecutar su código."
         )
-        splitter.addWidget(self.preview)
-        splitter.setSizes([530, 450])
-        layout.addWidget(splitter, 1)
-        self.selection_label = label("Sin analizar.", True)
-        layout.addWidget(self.selection_label)
-        layout.addWidget(
-            label(
-                "Se respetan .gitignore, límites de tamaño y exclusiones de secretos. La detección no es infalible: "
-                "revisa los Markdown antes de compartirlos. Los tokens son aproximados, no una garantía del límite del modelo.",
-                True,
-            )
+        right_layout.addWidget(self.preview, 1)
+        self.selection_label = label("Sin analizar. Selecciona un proyecto para comenzar.", True)
+        right_layout.addWidget(self.selection_label)
+        export = QHBoxLayout()
+        export.addWidget(label("Tokens ≈ / parte", True))
+        self.token_budget = QSpinBox()
+        self.token_budget.setRange(1000, 500000)
+        self.token_budget.setSingleStep(1000)
+        self.token_budget.setValue(12000)
+        self.token_budget.setToolTip(
+            "Estimación local, incluye formato al exportar. Reserva margen para tu LLM."
         )
+        export.addWidget(self.token_budget)
+        export.addStretch()
+        self.export_button = button("Exportar a Markdown", self.start_export, True)
+        self.export_button.setEnabled(False)
+        export.addWidget(self.export_button)
+        right_layout.addLayout(export)
+        hint = label(
+            "El ahorro de tokens viene de seleccionar contexto relevante. "
+            "Revisa el Markdown antes de compartirlo; los tokens y la detección de secretos son aproximados.",
+            True,
+        )
+        hint.setStyleSheet("font-size: 11px;")
+        right_layout.addWidget(hint)
+        columns.addWidget(right)
+        columns.setSizes([450, 700])
 
     def build_settings(self):
-        page, layout = scroll_page()
-        self.tabs.addTab(page, "Ajustes y diagnóstico")
-        layout.addWidget(label("Componentes locales"))
-        layout.addWidget(
-            label(
-                "Deja las rutas vacías para detección automática. No necesitas claves API. "
-                "El módulo de código funciona sin Tesseract ni LibreOffice.",
-                True,
-            )
+        layout = self.make_page(
+            "03   Ajustes y diagnóstico",
+            2,
+            "EQUILIBRIO  /  CONFIGURAR",
+            "Todo, en tu computadora.",
+            "Configura los componentes que convierten tus documentos.",
         )
+        page, content = scroll_page()
+        layout.addWidget(page, 1)
+        settings_group = QGroupBox("RUTAS DE COMPONENTES")
+        settings_layout = QFormLayout(settings_group)
+        settings_layout.setSpacing(12)
         self.setting_fields = {}
         for key, title in (
             ("tesseract", "Tesseract OCR"),
             ("soffice", "LibreOffice"),
-            ("tessdata", "Carpeta de idiomas tessdata"),
+            ("tessdata", "Idiomas tessdata"),
         ):
             row = QHBoxLayout()
-            row.addWidget(label(title))
             field = QLineEdit(str(self.settings.value(key, "")))
             field.setPlaceholderText("Detectar automáticamente")
             self.setting_fields[key] = field
             field.editingFinished.connect(self.save_settings)
             row.addWidget(field, 1)
             row.addWidget(button("Buscar…", lambda checked=False, k=key: self.choose_dependency(k)))
-            layout.addLayout(row)
-        layout.addWidget(button("Comprobar componentes e idiomas", self.start_diagnosis, True))
-        self.diagnostics = QPlainTextEdit()
-        self.diagnostics.setReadOnly(True)
-        self.diagnostics.setMinimumHeight(200)
-        layout.addWidget(self.diagnostics)
-        layout.addWidget(label("Privacidad y límites", False))
-        layout.addWidget(
+            settings_layout.addRow(title, row)
+        content.addWidget(settings_group)
+        content.addWidget(
             label(
-                "• El programa no sube documentos ni código y no usa servicios de IA.\n"
-                "• La instalación inicial sí descarga dependencias; después puede funcionar sin internet.\n"
-                "• Procesa solamente documentos de confianza; no es un sandbox de seguridad.\n"
-                "• No modifica PDFs protegidos o con campos de firma digital.\n"
-                "• Un PDF con OCR no garantiza reconocimiento perfecto ni reconstrucción de fórmulas.\n"
-                "• Los archivos se procesan en un proceso separado y las salidas completas se publican al terminar.",
+                "Tesseract reconoce escaneos; LibreOffice convierte Word. "
+                "El módulo de código funciona sin estos programas. No necesitas claves API.",
                 True,
             )
         )
-        layout.addStretch()
+        actions = QHBoxLayout()
+        actions.addWidget(button("Comprobar componentes e idiomas", self.start_diagnosis, True))
+        actions.addStretch()
+        content.addLayout(actions)
+        self.diagnostics = QPlainTextEdit()
+        self.diagnostics.setReadOnly(True)
+        self.diagnostics.setMinimumHeight(130)
+        self.diagnostics.setPlaceholderText(
+            "Pulsa «Comprobar componentes» para consultar el estado real y los idiomas instalados."
+        )
+        content.addWidget(self.diagnostics, 1)
+        content.addWidget(
+            label(
+                "La instalación inicial descarga dependencias; luego puedes trabajar sin internet. "
+                "Procesa documentos de confianza y revisa el reconocimiento de cifras, tablas y fórmulas. "
+                "No se modifican los originales ni los PDF protegidos o firmados.",
+                True,
+            )
+        )
 
     def save_settings(self):
         for key, field in self.setting_fields.items():
@@ -422,18 +562,41 @@ class MainWindow(QMainWindow):
             item.setToolTip(full)
             self.files.setItem(index, 0, item)
             self.files.setItem(index, 1, QTableWidgetItem("Pendiente"))
+        count = self.files.rowCount()
+        self.document_count.setText(f"{count} documento" + ("s" if count != 1 else ""))
 
     def remove_documents(self):
-        for index in sorted({i.row() for i in self.files.selectedIndexes()}, reverse=True):
+        removed = {i.row() for i in self.files.selectedIndexes()}
+        remaining = [i for i in range(self.files.rowCount()) if i not in removed]
+        results = {
+            new: self.document_results[old]
+            for new, old in enumerate(remaining)
+            if old in self.document_results
+        }
+        self.files.blockSignals(True)
+        for index in sorted(removed, reverse=True):
             self.files.removeRow(index)
-        self.document_results.clear()
+        self.document_results = results
+        self.files.blockSignals(False)
+        count = self.files.rowCount()
+        self.document_count.setText(f"{count} documento" + ("s" if count != 1 else ""))
+        self.show_document_result()
 
     def clear_documents(self):
         self.files.setRowCount(0)
         self.document_results.clear()
+        self.document_count.setText("0 documentos")
+        self.show_document_result()
 
     def mode_changed(self):
         force = self.mode.currentData() == "force"
+        self.mode_hint.setText(
+            {
+                "auto": "Conserva texto nativo y reconoce el texto de imágenes.",
+                "missing": "Omite imágenes si la página ya tiene texto. Revisa los PDF mixtos.",
+                "force": "Rasteriza todas las páginas. Puede perder vectores y propiedades de formularios.",
+            }[self.mode.currentData()]
+        )
         self.deskew.setEnabled(force)
         if not force:
             self.deskew.setChecked(False)
@@ -454,6 +617,7 @@ class MainWindow(QMainWindow):
             ):
                 return
         self.document_results.clear()
+        self.show_document_result()
         for index in range(self.files.rowCount()):
             self.files.item(index, 1).setText("Pendiente")
         self.start_job(
@@ -476,6 +640,35 @@ class MainWindow(QMainWindow):
             }
         )
 
+    def show_document_result(self):
+        result = self.document_results.get(self.files.currentRow())
+        for action in (self.pdf_button, self.markdown_button, self.copy_markdown_button):
+            action.setEnabled(bool(result))
+        self.document_preview.clear()
+        if not result:
+            self.document_result_label.setText("Selecciona un documento terminado para revisar su resultado.")
+            return
+        try:
+            # Limitar solo la vista: el Markdown en disco conserva el contenido completo.
+            with Path(result["markdown"]).open(encoding="utf-8") as stream:
+                text = stream.read(100001)
+            self.document_preview.setPlainText(text[:100000])
+            name = Path(result["markdown"]).name
+            suffix = " · vista truncada a 100.000 caracteres" if len(text) > 100000 else ""
+            self.document_result_label.setText(name + suffix)
+        except OSError as exc:
+            self.document_result_label.setText("No se pudo cargar la vista previa.")
+            self.log.appendPlainText(str(exc))
+            self.copy_markdown_button.setEnabled(False)
+
+    def open_result_file(self, key):
+        result = self.document_results.get(self.files.currentRow())
+        if result:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(result[key]))
+
+    def copy_document_preview(self):
+        QApplication.clipboard().setText(self.document_preview.toPlainText())
+
     def choose_project(self):
         directory = QFileDialog.getExistingDirectory(self, "Seleccionar proyecto")
         if directory:
@@ -488,6 +681,7 @@ class MainWindow(QMainWindow):
         if hasattr(self, "tree"):
             self.tree.clear()
             self.preview.clear()
+            self.preview_path.setText("VISTA PREVIA / SELECCIONA UN ARCHIVO")
             self.export_button.setEnabled(False)
             self.selection_label.setText("Vuelve a analizar para actualizar los archivos y las exclusiones.")
 
@@ -587,6 +781,7 @@ class MainWindow(QMainWindow):
         info = item.data(0, Qt.ItemDataRole.UserRole)
         if not info or not self.scan_result:
             return
+        self.preview_path.setText(info["path"])
         from .projects import ProjectOptions, checked_text
 
         try:
@@ -689,6 +884,8 @@ class MainWindow(QMainWindow):
             result = event["result"]
             self.files.item(event["index"], 1).setText("Listo con avisos" if result["warnings"] else "Listo")
             self.document_results[event["index"]] = result
+            self.files.setCurrentCell(event["index"], 0)
+            self.show_document_result()
             self.set_output(result["output"])
             self.log.appendPlainText("Generado: " + result["output"])
             for warning in result["warnings"]:
@@ -697,10 +894,14 @@ class MainWindow(QMainWindow):
             self.files.item(event["index"], 1).setText("Error")
             self.files.item(event["index"], 1).setToolTip(event["message"])
             self.log.appendPlainText(event["message"])
+            self.log_toggle.setChecked(True)
+            self.toggle_log(True)
         elif kind in {"error", "cancelled"}:
             self.had_terminal = True
             self.status.setText(event["message"].splitlines()[0][:200])
             self.log.appendPlainText(event["message"])
+            self.log_toggle.setChecked(True)
+            self.toggle_log(True)
             for i in range(self.files.rowCount()):
                 if self.files.item(i, 1).text() == "Procesando…":
                     self.files.item(i, 1).setText("Cancelado" if kind == "cancelled" else "Error")

@@ -1,10 +1,18 @@
 import time
 
 import pytest
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSettings, Qt
 from PySide6.QtWidgets import QApplication
 
 from local_ocr.gui import MainWindow
+
+
+@pytest.fixture(autouse=True)
+def isolated_settings(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "local_ocr.gui.QSettings",
+        lambda *_: QSettings(str(tmp_path / "settings.ini"), QSettings.Format.IniFormat),
+    )
 
 
 @pytest.fixture(scope="module")
@@ -81,4 +89,15 @@ def test_gui_document_batch_continues_after_error(app, tmp_path):
     assert window.files.item(1, 1).text() == "Listo"
     assert "1 error" in window.status.text()
     assert len(window.document_results) == 1
+    assert "Native PDF test" in window.document_preview.toPlainText()
+    assert window.pdf_button.isEnabled()
+    window.copy_document_preview()
+    assert "Native PDF test" in app.clipboard().text()
+    window.files.setCurrentCell(0, 0)
+    assert not window.document_preview.toPlainText()
+    assert not window.pdf_button.isEnabled()
+    window.files.selectRow(0)
+    window.remove_documents()
+    window.files.setCurrentCell(0, 0)
+    assert "Native PDF test" in window.document_preview.toPlainText()
     window.close()

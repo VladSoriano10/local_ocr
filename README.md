@@ -1,8 +1,8 @@
-# Local OCR
+# VladTor · Local OCR
 
 Aplicación de escritorio en español para Windows. Genera un **PDF con texto seleccionable y un Markdown** a partir de PDF o Word, y prepara **proyectos de código como contexto Markdown para LLM**. El procesamiento es local: sin APIs de IA, cuentas, tokens de pago ni subida de archivos.
 
-Primera versión funcional: **0.1.0**. No es una página web ni requiere un servidor. La instalación inicial descarga dependencias; después funciona sin internet si los componentes e idiomas necesarios están instalados.
+Primera versión funcional: **0.1.0**, con interfaz **Dualidad**. No es una página web ni requiere un servidor. La instalación inicial descarga dependencias; después funciona sin internet si los componentes e idiomas necesarios están instalados.
 
 ## Qué incluye
 
@@ -15,6 +15,18 @@ Primera versión funcional: **0.1.0**. No es una página web ni requiere un serv
 | Carpeta de código | Markdown completo o dividido, resumen e informe | Filtra, permite seleccionar y organiza código sin ejecutarlo |
 
 Arrastrar documentos, lotes, español/inglés, imágenes opcionales, detección básica de tablas, selección por árbol, vista previa de código, cancelación, diagnóstico de dependencias y botón para abrir resultados. Todo se publica en carpetas nuevas; no se sobrescriben originales ni resultados anteriores.
+
+## Interfaz Dualidad y punto de control
+
+La interfaz toma la idea de ángeles y demonios: alas con plumas y halo azul/dorado para documentos, membrana y cuerno en rojo/cobre para proyectos, y violeta para ajustes. Es una aplicación nativa; el diseño no descarga fuentes, scripts ni estilos desde internet.
+
+- **Documentos OCR:** configuración a la izquierda, cola y vista del Markdown generado a la derecha. Puedes abrir el PDF, abrir el Markdown o copiar el texto visible. La vista se limita a 100.000 caracteres; el archivo completo se conserva en disco.
+- **Proyectos de código:** árbol seleccionable, vista previa y límite estimado por parte.
+- **Ajustes y diagnóstico:** consulta real de componentes e idiomas. El registro de operaciones se puede desplegar.
+
+La interfaz anterior está conservada en la rama [checkpoint/interfaz-original](https://github.com/VladSoriano10/local_ocr/tree/checkpoint/interfaz-original). Puedes abrir esa rama y descargar su ZIP para compararla sin reemplazar la versión nueva. El punto de control contiene el programa completo.
+
+[Comparación visual de ambas interfaces](docs/interfaz.md).
 
 ## Opción 1 — Usar el ejecutable de Windows
 
@@ -119,7 +131,7 @@ Límites iniciales: 1 MB por archivo (configurable hasta 20 MB), 30 MB totales y
 
 ## Desarrollo y pruebas
 
-Estructura principal: `src/local_ocr/gui.py` (interfaz), `documents.py` (PDF/Word), `projects.py` (contexto de código), `worker.py` (proceso independiente), `dependencies.py` (diagnóstico) y `common.py` (cancelación y salidas transaccionales).
+Estructura principal: `src/local_ocr/gui.py` (interfaz), `appearance.py` (estilo y emblema vectorial), `documents.py` (PDF/Word), `projects.py` (contexto de código), `worker.py` (proceso independiente), `dependencies.py` (diagnóstico) y `common.py` (cancelación y salidas transaccionales).
 
 ```powershell
 .venv\Scripts\python.exe -m pip install ".[dev,build]"
@@ -130,7 +142,7 @@ Estructura principal: `src/local_ocr/gui.py` (interfaz), `documents.py` (PDF/Wor
 
 Las pruebas de integración usan Tesseract en inglés y LibreOffice cuando están instalados; se marcan como omitidas si faltan. Cubren OCR real, páginas mixtas, Word con imagen, texto buscable, preservación visual de muestras, firmas, cifrado, exclusiones, cambios concurrentes, fragmentación, cancelación y el flujo de interfaz. `scripts/smoke_frozen.py` comprueba el ejecutable empaquetado con OCR real. No sustituyen pruebas de todos tus documentos ni de todas las versiones de Windows.
 
-Linux para desarrollo: instala `tesseract-ocr`, `tesseract-ocr-spa`, `libreoffice-writer` y las bibliotecas Qt de tu distribución. Luego usa Python 3.12, `python -m venv .venv`, `pip install -r requirements.txt '.[dev]'` y `python -m local_ocr`. PyInstaller no hace compilación cruzada: el ejecutable Windows se construye en Windows con GitHub Actions.
+Linux para desarrollo: instala `tesseract-ocr`, `tesseract-ocr-spa`, `libreoffice-writer` y las bibliotecas Qt de tu distribución. Luego usa Python 3.12, `python -m venv .venv`, `pip install -r requirements.txt`, `pip install -e '.[dev]'` y `python -m local_ocr`. PyInstaller no hace compilación cruzada: el ejecutable Windows se construye en Windows con GitHub Actions.
 
 ## Referencias y licencias
 
@@ -142,4 +154,4 @@ Consulta [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). El repositorio no asi
 
 ## Mejoras futuras
 
-Revisión visual de OCR dentro de la app, edición de texto antes de exportar, mejores heurísticas multicolumna, fórmulas/tablas complejas, tokenizadores específicos, instalador único y firma de ejecutables no están implementados en esta versión. No se prometen porcentajes de precisión ni reducción de tokens fija.
+Visor del PDF dentro de la app, edición de texto antes de exportar, mejores heurísticas multicolumna, fórmulas/tablas complejas, tokenizadores específicos, instalador único y firma de ejecutables no están implementados en esta versión. No se prometen porcentajes de precisión ni reducción de tokens fija.
