@@ -1,0 +1,6 @@
+# Versiones principales verificadas para la primera versión.
+PySide6==6.11.2
+PyMuPDF==1.26.6
+ocrmypdf==17.12.1
+pathspec==1.1.1
+-e .

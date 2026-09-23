@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "local-ocr"
+version = "0.1.0"
+description = "PDF y Word a PDF buscable y Markdown; proyectos de código a contexto local para LLM."
+requires-python = ">=3.12,<3.15"
+dependencies = [
+  "PySide6>=6.8,<7",
+  "PyMuPDF>=1.26,<2",
+  "ocrmypdf>=17.12.1,<18",
+  "pathspec>=0.12,<2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10", "ruff>=0.9,<1", "python-docx>=1.1,<2"]
+build = ["pyinstaller>=6.16,<7"]
+
+[project.gui-scripts]
+local-ocr = "local_ocr.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+markers = ["integration: necesita Tesseract o LibreOffice instalado"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
