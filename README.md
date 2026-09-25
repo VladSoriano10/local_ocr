@@ -71,7 +71,7 @@ Para español hace falta `spa.traineddata`; para inglés, `eng.traineddata`; y p
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\descargar_idiomas.ps1
 ```
 
-El script descarga los tres idiomas desde el repositorio oficial de Tesseract a `%LOCALAPPDATA%\LocalOCR\tessdata`, sin sobrescribir los existentes. Selecciona esa carpeta en **Ajustes → Carpeta de idiomas tessdata**. En el ZIP del ejecutable el script está en la carpeta principal: usa `-File .\descargar_idiomas.ps1`.
+El script descarga los tres idiomas desde el repositorio oficial de Tesseract a `%LOCALAPPDATA%\LocalOCR\tessdata`, sin sobrescribir los existentes. También crea `configs\hocr`, requerido por OCRmyPDF; las primeras versiones omitían ese archivo. La aplicación repara automáticamente esa configuración si la carpeta permite escritura. Selecciona esa carpeta en **Ajustes → Carpeta de idiomas tessdata**. En el ZIP del ejecutable el script está en la carpeta principal: usa `-File .\descargar_idiomas.ps1`.
 
 Pulsa **Comprobar componentes e idiomas**. Deben aparecer `spa`, `eng` y, si activas rotación, `osd`. El módulo de código y los PDF puramente textuales no necesitan Tesseract. OCRmyPDF 17 se utiliza con salida PDF normal, no PDF/A; no se requiere Ghostscript para este flujo al usar pypdfium2.
 

@@ -6,7 +6,7 @@ import pymupdf
 import pytest
 
 from local_ocr.common import AppError, Cancelled
-from local_ocr.dependencies import available_languages, find_program
+from local_ocr.dependencies import HOCR_CONFIG, available_languages, ensure_ocr_configs, find_program
 from local_ocr.documents import DocumentOptions, convert_document
 
 
@@ -37,6 +37,21 @@ def require_tesseract():
         pytest.skip("Tesseract no instalado")
     if "eng" not in available_languages({}):
         pytest.skip("Falta idioma eng")
+
+
+def test_private_tessdata_repairs_required_hocr_config(tmp_path):
+    tessdata = tmp_path / "tessdata"
+    tessdata.mkdir()
+    ensure_ocr_configs({"tessdata": str(tessdata)})
+    assert (tessdata / "configs" / "hocr").read_text(encoding="ascii") == HOCR_CONFIG
+
+
+def test_private_tessdata_keeps_existing_hocr_config(tmp_path):
+    hocr = tmp_path / "tessdata" / "configs" / "hocr"
+    hocr.parent.mkdir(parents=True)
+    hocr.write_text("custom config\n", encoding="ascii")
+    ensure_ocr_configs({"tessdata": str(tmp_path / "tessdata")})
+    assert hocr.read_text(encoding="ascii") == "custom config\n"
 
 
 def test_native_pdf_passthrough_and_markdown(tmp_path):

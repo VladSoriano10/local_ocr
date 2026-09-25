@@ -19,7 +19,7 @@ from .common import (
     safe_name,
     write_json,
 )
-from .dependencies import available_languages, find_program, runtime_env
+from .dependencies import available_languages, ensure_ocr_configs, find_program, runtime_env
 
 
 @dataclass
@@ -285,6 +285,7 @@ def convert_document(
             )
         output_pdf = stage / f"{name}_OCR.pdf"
         if needs_ocr:
+            ensure_ocr_configs(settings)
             installed = available_languages(settings)
             missing = set(options.language.split("+")) - set(installed)
             if options.rotate and "osd" not in installed:

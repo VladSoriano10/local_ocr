@@ -7,6 +7,8 @@ from pathlib import Path
 
 from .common import AppError, run_process
 
+HOCR_CONFIG = "tessedit_create_hocr 1\nhocr_font_info 0\n"
+
 
 def find_program(name: str, custom: str = "") -> str | None:
     if custom:
@@ -40,6 +42,27 @@ def runtime_env(settings: dict) -> dict:
     return env
 
 
+def ensure_ocr_configs(settings: dict) -> None:
+    """Repara la carpeta tessdata privada creada por versiones anteriores."""
+    configured = settings.get("tessdata", "")
+    if not configured:
+        return
+    tessdata = Path(configured).expanduser().resolve()
+    if not tessdata.is_dir():
+        raise AppError("La carpeta tessdata configurada no existe.")
+    target = tessdata / "configs" / "hocr"
+    if target.is_file():
+        return
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(HOCR_CONFIG, encoding="ascii")
+    except OSError as exc:
+        raise AppError(
+            "La carpeta tessdata no contiene configs\\hocr y no se pudo repararla. "
+            "Ejecute de nuevo descargar_idiomas.ps1 o elija una carpeta con permisos de escritura."
+        ) from exc
+
+
 def available_languages(settings: dict) -> list[str]:
     exe = find_program("tesseract", settings.get("tesseract", ""))
     if not exe:
@@ -62,6 +85,7 @@ def diagnose(settings: dict) -> dict:
         except importlib.metadata.PackageNotFoundError:
             result["packages"][name] = "No disponible"
     try:
+        ensure_ocr_configs(settings)
         result["languages"] = available_languages(settings)
     except AppError as exc:
         result["warnings"].append(str(exc))
